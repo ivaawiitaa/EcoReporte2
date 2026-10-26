@@ -2,8 +2,9 @@
 # Debe llamarse exactamente "codemagic.yaml" (minúsculas) y estar en la RAÍZ del repositorio.
 #
 # Workflows:
-#   1) ios-tests   -> compila para simulador y corre los tests. No requiere cuenta de Apple Developer.
-#   2) ios-release -> compila el .ipa firmado y lo sube a TestFlight. Requiere Apple Developer Program.
+#   1) ios-tests           -> compila para simulador y corre los tests. No requiere cuenta de Apple Developer.
+#   2) ios-release         -> compila el .ipa firmado y lo sube a TestFlight. Requiere Apple Developer Program.
+#   3) ios-simulator-build -> compila y genera el .zip para Appetize.io. No requiere cuenta de Apple Developer.
 
 definitions:
   env_vars: &common_env
@@ -126,7 +127,8 @@ workflows:
         notify:
           success: true
           failure: true
-# ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
   # 3) Build para Simulador (Ideal para Appetize.io)
   # ---------------------------------------------------------------------------
   ios-simulator-build:
@@ -152,17 +154,40 @@ workflows:
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -sdk iphonesimulator \
-            -derivedDataPath build/DerivedData \
+            -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Comprimir el .app para Appetize.io
+      - name: Comprimir y preparar el .app para Appetize.io
         script: |
-          # Navegamos a la carpeta donde Xcode guarda el build del simulador
-          cd build/DerivedData/Build/Products/Debug-iphonesimulator/
+          # Creamos la carpeta limpia de salida en la raíz del proyecto
+          mkdir -p output_artifact
+
+          # Buscamos automáticamente el archivo .app compilado dentro de DerivedData
+          APP_PATH=$(find DerivedData/Build/Products/Debug-iphonesimulator -name "*.app" -maxdepth 1)
           
-          # Comprimimos la app (reemplaza 'EcoReporte.app' si tu scheme o app se llama diferente)
-          zip -r EcoReporte-simulator.zip EcoReporte.app
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: No se encontró ningún archivo .app"
+            exit 1
+          fi
           
-          echo "¡Archivo ZIP creado con éxito para Appetize!"
+          echo "App encontrada en: $APP_PATH"
+          
+          # Nos movemos a la carpeta del producto y comprimimos el .app
+          cd "$(dirname "$APP_PATH")"
+          APP_NAME=$(basename "$APP_PATH")
+          ZIP_NAME="${APP_NAME%.app}-simulator.zip"
+          
+          zip -r "$ZIP_NAME" "$APP_NAME"
+          
+          # Movemos el .zip a la carpeta de artefactos de salida
+          mv "$ZIP_NAME" "$CM_BUILD_DIR/EcoReporte/output_artifact/"
+          echo "¡ZIP preparado con éxito en output_artifact/$ZIP_NAME!"
     artifacts:
-      - EcoReporte/build/DerivedData/Build/Products/Debug-iphonesimulator/EcoReporte-simulator.zip
+      - output_artifact/*.zip
+    publishing:
+      email:
+        recipients:
+          - tu-correo@ejemplo.com # <-- cámbialo
+        notify:
+          success: true
+          failure: true
