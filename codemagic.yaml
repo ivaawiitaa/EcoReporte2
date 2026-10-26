@@ -1,5 +1,5 @@
 # codemagic.yaml — EcoReporte (SwiftUI, iOS 17.2+)
-# Este archivo debe ir en la RAÍZ del repositorio (junto a la carpeta EcoReporte/).
+# Debe llamarse exactamente "codemagic.yaml" (minúsculas) y estar en la RAÍZ del repositorio.
 #
 # Workflows:
 #   1) ios-tests   -> compila para simulador y corre los tests. No requiere cuenta de Apple Developer.
@@ -54,15 +54,15 @@ workflows:
           ")
           echo "Simulador seleccionado: $UDID"
 
+          set -o pipefail
           xcodebuild test \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -destination "id=$UDID" \
             -resultBundlePath "$CM_BUILD_DIR/TestResults.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
-            | xcpretty --report junit --output "$CM_BUILD_DIR/test-results.xml" \
-            && exit ${PIPESTATUS[0]}
-    test_report: test-results.xml
+            | xcpretty --report junit --output "$CM_BUILD_DIR/test-results.xml"
+        test_report: $CM_BUILD_DIR/test-results.xml
     artifacts:
       - $CM_BUILD_DIR/TestResults.xcresult
     publishing:
