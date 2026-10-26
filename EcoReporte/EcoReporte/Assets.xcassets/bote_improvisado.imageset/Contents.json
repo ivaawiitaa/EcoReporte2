@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "bote_improvisado.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

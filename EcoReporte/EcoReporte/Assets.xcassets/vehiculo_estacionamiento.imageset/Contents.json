@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "vehiculo_estacionamiento.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
