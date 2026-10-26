@@ -126,3 +126,43 @@ workflows:
         notify:
           success: true
           failure: true
+# ---------------------------------------------------------------------------
+  # 3) Build para Simulador (Ideal para Appetize.io)
+  # ---------------------------------------------------------------------------
+  ios-simulator-build:
+    name: iOS - Build para Simulador (Appetize)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    working_directory: EcoReporte
+    environment:
+      xcode: latest
+      vars:
+        <<: *common_env
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    scripts:
+      - name: Compilar para iOS Simulator
+        script: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphonesimulator \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Comprimir el .app para Appetize.io
+        script: |
+          # Navegamos a la carpeta donde Xcode guarda el build del simulador
+          cd build/DerivedData/Build/Products/Debug-iphonesimulator/
+          
+          # Comprimimos la app (reemplaza 'EcoReporte.app' si tu scheme o app se llama diferente)
+          zip -r EcoReporte-simulator.zip EcoReporte.app
+          
+          echo "¡Archivo ZIP creado con éxito para Appetize!"
+    artifacts:
+      - EcoReporte/build/DerivedData/Build/Products/Debug-iphonesimulator/EcoReporte-simulator.zip
