@@ -1,0 +1,128 @@
+# codemagic.yaml — EcoReporte (SwiftUI, iOS 17.2+)
+# Este archivo debe ir en la RAÍZ del repositorio (junto a la carpeta EcoReporte/).
+#
+# Workflows:
+#   1) ios-tests   -> compila para simulador y corre los tests. No requiere cuenta de Apple Developer.
+#   2) ios-release -> compila el .ipa firmado y lo sube a TestFlight. Requiere Apple Developer Program.
+
+definitions:
+  env_vars: &common_env
+    XCODE_PROJECT: "EcoReporte.xcodeproj"
+    XCODE_SCHEME: "EcoReporte"
+
+workflows:
+
+  # ---------------------------------------------------------------------------
+  # 1) Compilar + tests en simulador (sin firma)
+  # ---------------------------------------------------------------------------
+  ios-tests:
+    name: iOS - Build y Tests
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    working_directory: EcoReporte # carpeta donde vive EcoReporte.xcodeproj
+    environment:
+      xcode: latest
+      vars:
+        <<: *common_env
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Mostrar versiones
+        script: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Compilar y ejecutar tests en simulador
+        script: |
+          # Elige dinámicamente un iPhone disponible (evita fallar si cambia el modelo en la imagen de Xcode)
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)['devices']
+          for runtime in sorted(data, reverse=True):
+              if 'iOS' not in runtime:
+                  continue
+              for d in data[runtime]:
+                  if d['name'].startswith('iPhone'):
+                      print(d['udid'])
+                      sys.exit(0)
+          ")
+          echo "Simulador seleccionado: $UDID"
+
+          xcodebuild test \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "id=$UDID" \
+            -resultBundlePath "$CM_BUILD_DIR/TestResults.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty --report junit --output "$CM_BUILD_DIR/test-results.xml" \
+            && exit ${PIPESTATUS[0]}
+    test_report: test-results.xml
+    artifacts:
+      - $CM_BUILD_DIR/TestResults.xcresult
+    publishing:
+      email:
+        recipients:
+          - tu-correo@ejemplo.com # <-- cámbialo
+        notify:
+          success: false
+          failure: true
+
+  # ---------------------------------------------------------------------------
+  # 2) Build firmado + TestFlight
+  # ---------------------------------------------------------------------------
+  ios-release:
+    name: iOS - TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    working_directory: EcoReporte
+    integrations:
+      app_store_connect: codemagic # <-- nombre de tu API key en Codemagic (Team settings > Integrations)
+    environment:
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.tuempresa.ecoreporte # <-- debe coincidir con el bundle ID del proyecto
+      vars:
+        <<: *common_env
+        APP_STORE_APPLE_ID: 1234567890 # <-- Apple ID numérico de la app (App Store Connect > Información de la app)
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*"
+          include: true
+    scripts:
+      - name: Aplicar perfiles de firma
+        script: |
+          xcode-project use-profiles
+
+      - name: Calcular número de build
+        script: |
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo 0)
+          echo "BUILD_NUM=$((LATEST + 1))" >> "$CM_ENV"
+
+      - name: Generar .ipa
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags="CURRENT_PROJECT_VERSION=$BUILD_NUM"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+      email:
+        recipients:
+          - tu-correo@ejemplo.com # <-- cámbialo
+        notify:
+          success: true
+          failure: true
